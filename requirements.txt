@@ -1,0 +1,3 @@
+pyspark=3.2.4
+python=3.9
+matplotlib #per il plotting test
