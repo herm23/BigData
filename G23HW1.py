@@ -20,10 +20,6 @@ def FairFFT(U, kA, kB):
     kB: Number of centers required for group 'B'
     """
 
-    # Sanity check
-    if not U or (kA == 0 and kB == 0):
-        return []
-
     S = []           # selected centers
     countA = 0       # selection count for group A
     countB = 0       # selection count for group B 
