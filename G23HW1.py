@@ -56,3 +56,26 @@ def FairFFT(U, kA, kB):
             countB += 1
 
     return S
+
+
+def run_local_fair_fft(partition, kA, kB):
+
+    points = list(partition)
+    if not points:
+        return []
+    return FairFFT(points, kA, kB)
+
+def MRFairFFT(U, kA, kB):
+    """
+    U: RDD di tuple ((x1, x2, ...), gruppo)
+    kA: Budget per gruppo A
+    kB: Budget per gruppo B
+    """
+    
+    #Round 1
+    coreset_rdd = U.mapPartitions(lambda part: run_local_fair_fft(part, kA, kB))
+
+    #Round 2
+    coreset = coreset_rdd.collect()
+
+    return FairFFT(coreset, kA, kB)
