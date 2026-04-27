@@ -1,7 +1,11 @@
 import math
+import random
 import sys
 import time
 from pyspark import SparkConf, SparkContext
+
+#NOTE: Fixed Seed
+random.seed(42)
 
 # Function to calculate the Euclidean distance between two points represented as tuples (x, y)
 def euclidean_distance(p1, p2):
@@ -27,7 +31,9 @@ def FairFFT(U, kA, kB):
     countB = 0       # selection count for group B 
 
     # First center selection
-    first = U[0]
+    first_idx = random.randint(0, len(U) - 1)
+    first = U[first_idx]
+    
     S.append(first)
     if first[1] == 'A':
         countA += 1
@@ -87,6 +93,12 @@ def MRFairFFT(U, kA, kB):
     coreset = coreset_rdd.collect()
     return FairFFT(coreset, kA, kB)
 
+# Reads the set 𝑈 of input points into an RDD -called inputPoints-, subdivided into 𝐿 partitions.
+def parse_line(line):
+    parts = line.strip().split(',')
+    point = tuple(float(x) for x in parts[:-1])
+    group = parts[-1]
+    return (point, group)
 
 def main():
     # Command line arguments
@@ -104,13 +116,6 @@ def main():
 
     conf = SparkConf().setAppName("G23HW1")
     sc = SparkContext(conf=conf)
-
-     # Reads the set 𝑈 of input points into an RDD -called inputPoints-, subdivided into 𝐿 partitions.
-    def parse_line(line):
-        parts = line.strip().split(',')
-        point = tuple(float(x) for x in parts[:-1])
-        group = parts[-1]
-        return (point, group)
 
     #save in cache since in this way in the calculation time it does not include the time to load the dataset
     inputPoints = sc.textFile(file_path, minPartitions=L).map(parse_line).repartition(L).cache()
