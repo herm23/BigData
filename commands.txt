@@ -1,0 +1,19 @@
+#NOTE: Dei vm login
+ssh <tuo-account-dei>@login.dei.unipd.it
+
+#NOTE: Login to cluster CloudVeneto
+ssh -p 2222 group23@147.162.226.106
+
+#NOTE: Copying from your machine to dei vm
+scp G23HW1.py <tuo-account-dei>@login.dei.unipd.it:
+
+
+#NOTE: Copying from dei vm to CloudVeneto Cluster
+scp -P 2222 G23HW1.py group23@147.162.226.106:.
+
+
+#NOTE: Executing program (X is the num of executors)
+spark-submit --num-executors X G23HW1.py /data/BDC2526/<nome_file> <kA> <kB> <L>
+
+#NOTE: Looking at hadoop data
+hdfs dfs -ls /data/BDC2526/

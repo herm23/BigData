@@ -116,6 +116,7 @@ def main():
 
     conf = SparkConf().setAppName("G23HW1")
     sc = SparkContext(conf=conf)
+    sc.setLogLevel("ERROR")
 
     #save in cache since in this way in the calculation time it does not include the time to load the dataset
     inputPoints = sc.textFile(file_path, minPartitions=L).map(parse_line).repartition(L).cache()
