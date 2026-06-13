@@ -5,16 +5,12 @@ import threading
 from pyspark import SparkConf, SparkContext, StorageLevel
 from pyspark.streaming import StreamingContext
 
-# NOTE: Fixed seed for reproducibility
-random.seed(42)
-
-# Prime used in the 2-universal hash family h(x) = ((a*x + b) mod P) mod C
+# Prime value 
 P = 8191
 
-
-# Operations to perform after receiving an RDD 'batch' at time 'time'
+# function to process each batch of the stream
 def process_batch(time, batch):
-    global streamLength, histogram, sticky_sample, CM_table
+    global streamLength, frequencies, sticky_sample, CM_table
 
     # If we already have enough points (>= n), skip this batch.
     if streamLength[0] >= n:
@@ -32,8 +28,8 @@ def process_batch(time, batch):
     for s in batch_items:
         x = int(s)
 
-        # True frequency (histogram of the first n items)
-        histogram[x] = histogram.get(x, 0) + 1
+        # True frequency
+        frequencies[x] = frequencies.get(x, 0) + 1
 
         # Sticky Sampling
         if x in sticky_sample:
@@ -52,12 +48,9 @@ def process_batch(time, batch):
 
 
 if __name__ == '__main__':
-    assert len(sys.argv) == 8, "USAGE: n phi epsilon delta d w portExp"
+    assert len(sys.argv) == 8, "Warning: n phi epsilon delta d w portExp"
 
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-    # INPUT READING
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-
+    # Input parsing
     n = int(sys.argv[1])
     phi = float(sys.argv[2])
     epsilon = float(sys.argv[3])
@@ -75,13 +68,10 @@ if __name__ == '__main__':
     print(f"w = {w}")
     print(f"port = {portExp}")
 
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-    # DEFINING THE REQUIRED DATA STRUCTURES TO MAINTAIN THE STATE OF THE STREAM
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-
+    # Data structure initialization
     streamLength = [0]
-    histogram = {}       # true frequencies of the first n items
-    sticky_sample = {}   # Sticky Sampling reservoir: item -> counter
+    frequencies = {}       
+    sticky_sample = {} 
 
     # Sticky Sampling sampling rate p = r/n, with r = ln(1/(delta*phi)) / epsilon
     r = math.log(1 / (delta * phi)) / epsilon
@@ -91,13 +81,10 @@ if __name__ == '__main__':
     CM_table = [[0] * w for _ in range(d)]
     hash_params = [(random.randint(1, P - 1), random.randint(0, P - 1)) for _ in range(d)]
 
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-    # SPARK STREAMING SETUP
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-
+    # Stram processing with Spark Streaming
     conf = SparkConf().setMaster("local[*]").setAppName("G23HW2")
     sc = SparkContext(conf=conf)
-    ssc = StreamingContext(sc, 0.1)  # Batch duration of 0.1 sec = 100 ms
+    ssc = StreamingContext(sc, 0.1)  #  0.1 sec = 100 ms
     ssc.sparkContext.setLogLevel("ERROR")
 
     stopping_condition = threading.Event()
@@ -109,43 +96,34 @@ if __name__ == '__main__':
     stopping_condition.wait()
     ssc.stop(False, False)
 
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-    # COMPUTING THE FINAL RESULTS
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
+    # Final results computation
     true_freq_threshold = phi * n
+    true_frequent_items = sorted(x for x in frequencies if frequencies[x] >= true_freq_threshold)
 
-    # True frequent items
-    true_frequent_items = sorted(x for x in histogram if histogram[x] >= true_freq_threshold)
-
-    # F_SS: items in the Sticky Sampling reservoir whose estimated frequency
-    # is at least (phi - epsilon) * n
+    # F_SS: items in the Sticky Sampling reservoir whose estimated frequency is at least (phi - epsilon) * n
     ss_threshold = (phi - epsilon) * n
     F_SS = sorted(x for x in sticky_sample if sticky_sample[x] >= ss_threshold)
 
     # F_CM: items whose Count-Min estimated frequency is at least phi * n
     F_CM = []
-    for x in histogram:
+    for x in frequencies:
         estimate = min(CM_table[i][((hash_params[i][0] * x + hash_params[i][1]) % P) % w] for i in range(d))
         if estimate >= true_freq_threshold:
             F_CM.append(x)
     F_CM = sorted(F_CM)
 
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-    # PRINTING THE RESULTS
-    # &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-
-    # Kept commented out: re-enable it for the final code submission.
+    # Final printing of results
     print("TRUE FREQUENT ITEMS")
     for x in true_frequent_items:
-        print(f"Item = {x} True Freq = {histogram[x]}")
+        print(f"Item = {x} True Freq = {frequencies[x]}")
     
     print("STICKY SAMPLING")
     print(f"Size of dictionary = {len(sticky_sample)}")
     for x in F_SS:
-        print(f"Item = {x} True Freq = {histogram[x]}")
+        print(f"Item = {x} True Freq = {frequencies[x]}")
     
     print("COUNT-MIN SKETCH")
     print(f"Size of F_CM = {len(F_CM)}")
     for x in F_CM:
-        print(f"Item = {x} True Freq = {histogram[x]}")
+        print(f"Item = {x} True Freq = {frequencies[x]}")
