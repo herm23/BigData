@@ -5,12 +5,12 @@ import threading
 from pyspark import SparkConf, SparkContext, StorageLevel
 from pyspark.streaming import StreamingContext
 
-# Prime value 
+# Prime value
 P = 8191
 
 # function to process each batch of the stream
 def process_batch(time, batch):
-    global streamLength, frequencies, sticky_sample, CM_table
+    global streamLength, frequencies, sticky_sample, CM_table, cm_set
 
     # If we already have enough points (>= n), skip this batch.
     if streamLength[0] >= n:
@@ -43,6 +43,12 @@ def process_batch(time, batch):
             j = ((a * x + b) % P) % w
             CM_table[i][j] += 1
 
+        # F_CM: add x the first time its Count-Min estimated frequency reaches phi * n
+        if x not in cm_set:
+            estimate = min(CM_table[i][((hash_params[i][0] * x + hash_params[i][1]) % P) % w] for i in range(d))
+            if estimate >= true_freq_threshold:
+                cm_set.add(x)
+
     if streamLength[0] >= n:
         stopping_condition.set()
 
@@ -70,16 +76,20 @@ if __name__ == '__main__':
 
     # Data structure initialization
     streamLength = [0]
-    frequencies = {}       
-    sticky_sample = {} 
+    frequencies = {}
+    sticky_sample = {}
 
     # Sticky Sampling sampling rate p = r/n, with r = ln(1/(delta*phi)) / epsilon
     r = math.log(1 / (delta * phi)) / epsilon
     p_sample = r / n
 
+    # True-frequency threshold phi*n, also used to build F_CM during the stream
+    true_freq_threshold = phi * n
+
     # Count-Min sketch: d x w table and d hash functions h(x) = ((a*x+b) mod P) mod w
     CM_table = [[0] * w for _ in range(d)]
     hash_params = [(random.randint(1, P - 1), random.randint(0, P - 1)) for _ in range(d)]
+    cm_set = set()
 
     # Stram processing with Spark Streaming
     conf = SparkConf().setMaster("local[*]").setAppName("G23HW2")
@@ -98,31 +108,25 @@ if __name__ == '__main__':
 
 
     # Final results computation
-    true_freq_threshold = phi * n
     true_frequent_items = sorted(x for x in frequencies if frequencies[x] >= true_freq_threshold)
 
     # F_SS: items in the Sticky Sampling reservoir whose estimated frequency is at least (phi - epsilon) * n
     ss_threshold = (phi - epsilon) * n
     F_SS = sorted(x for x in sticky_sample if sticky_sample[x] >= ss_threshold)
 
-    # F_CM: items whose Count-Min estimated frequency is at least phi * n
-    F_CM = []
-    for x in frequencies:
-        estimate = min(CM_table[i][((hash_params[i][0] * x + hash_params[i][1]) % P) % w] for i in range(d))
-        if estimate >= true_freq_threshold:
-            F_CM.append(x)
-    F_CM = sorted(F_CM)
+    # F_CM: items added during the stream, the first time their estimate reached phi * n
+    F_CM = sorted(cm_set)
 
     # Final printing of results
     print("TRUE FREQUENT ITEMS")
     for x in true_frequent_items:
         print(f"Item = {x} True Freq = {frequencies[x]}")
-    
+
     print("STICKY SAMPLING")
     print(f"Size of dictionary = {len(sticky_sample)}")
     for x in F_SS:
         print(f"Item = {x} True Freq = {frequencies[x]}")
-    
+
     print("COUNT-MIN SKETCH")
     print(f"Size of F_CM = {len(F_CM)}")
     for x in F_CM:
